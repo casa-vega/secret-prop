@@ -12,7 +12,7 @@ jobs:
 
       - name: Setup GitHub CLI
         run: |
-          gh auth login --with-token <<< "${{ secrets.GH_PAT }}"
+          gh auth login --with-token <<< "${{ secrets.SECRETS_TOKEN }}"
 
       - name: Process Secrets
         env:
