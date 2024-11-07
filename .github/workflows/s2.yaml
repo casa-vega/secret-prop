@@ -24,7 +24,7 @@ jobs:
     steps:
       - uses: actions/github-script@v7
         with:
-          token: ${{ secrets.PAT_TOKEN }}
+          token: ${{ secrets.SECRETS_TOKEN }}
           script: |
             const secret = '${{ matrix.secret }}'
             const secretValue = process.env[secret]
