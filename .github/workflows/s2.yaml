@@ -1,4 +1,4 @@
-name: Propagate Repository Secrets
+name: Propagate Repository Secrets2
 on:
   workflow_dispatch:
 
@@ -22,43 +22,35 @@ jobs:
       matrix: ${{fromJson(needs.get-mappings.outputs.matrix)}}
       fail-fast: false
     steps:
-      - uses: actions/github-script@v7
-        with:
-          token: ${{ secrets.SECRETS_TOKEN }}
-          script: |
-            const secret = '${{ matrix.secret }}'
-            const secretValue = process.env[secret]
-            const repos = ${{ toJson(matrix.repos) }}
-            
-            for (const repo of repos) {
-              try {
-                console.log(`Checking repository ${context.repo.owner}/${repo}`)
-                
-                // First verify the repository exists and we have access
-                try {
-                  await github.rest.repos.get({
-                    owner: context.repo.owner,
-                    repo: repo
-                  });
-                } catch (e) {
-                  console.error(`Repository ${context.repo.owner}/${repo} not found or no access`);
-                  continue;
-                }
-                
-                console.log(`Setting ${secret} for repository ${repo}`)
-                await github.rest.actions.createOrUpdateRepoSecret({
-                  owner: context.repo.owner,
-                  repo: repo,
-                  secret_name: secret,
-                  secret_value: secretValue
-                })
-                console.log(`Successfully set secret for ${repo}`)
-              } catch (error) {
-                console.error(`Error setting secret for ${repo}:`, error.message)
-                if (error.status === 404) {
-                  console.error('Repository not found or no access')
-                }
-              }
-            }
+      - name: Propagate Secret
         env:
-          ${{ matrix.secret }}: ${{ secrets[matrix.secret] }}
+          GITHUB_ORG: ${{ github.repository_owner }}
+          PAT: ${{ secrets.PAT_TOKEN }}
+        run: |
+          SECRET_VALUE="${{ secrets[matrix.secret] }}"
+          
+          echo '${{ toJson(matrix.repos) }}' | jq -r '.[]' | while read -r repo; do
+            if [ ! -z "$repo" ]; then
+              FULL_REPO="$GITHUB_ORG/$repo"
+              echo "Getting public key for $FULL_REPO"
+              
+              # Get public key first
+              KEY_RESPONSE=$(curl -sL \
+                -H "Authorization: Bearer $PAT" \
+                -H "Accept: application/vnd.github+json" \
+                -H "X-GitHub-Api-Version: 2022-11-28" \
+                "https://api.github.com/repos/$FULL_REPO/actions/secrets/public-key")
+              
+              KEY=$(echo $KEY_RESPONSE | jq -r '.key')
+              KEY_ID=$(echo $KEY_RESPONSE | jq -r '.key_id')
+              
+              echo "Setting ${{ matrix.secret }} for repository $FULL_REPO"
+              curl -sL \
+                -X PUT \
+                -H "Accept: application/vnd.github+json" \
+                -H "Authorization: Bearer $PAT" \
+                -H "X-GitHub-Api-Version: 2022-11-28" \
+                "https://api.github.com/repos/$FULL_REPO/actions/secrets/${{ matrix.secret }}" \
+                -d "{\"encrypted_value\":\"$SECRET_VALUE\",\"key_id\":\"$KEY_ID\"}"
+            fi
+          done
