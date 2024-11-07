@@ -1,12 +1,7 @@
 name: Sync Repository Secrets
 
 on:
-  workflow_dispatch:
-    inputs:
-      secret_value:
-        description: 'Value to set for secrets that do not exist'
-        required: true
-        type: string
+  workflow_dispatch: {}
 
 jobs:
   sync-secrets:
@@ -22,7 +17,6 @@ jobs:
       - name: Process Secrets
         env:
           SECRETS: '${{ toJson(secrets) }}'
-          NEW_SECRET_VALUE: '${{ github.event.inputs.secret_value }}'
         run: |
           # Read all secret names from mapping.json
           SECRET_NAMES=$(jq -r 'keys[]' mapping.json)
@@ -35,10 +29,8 @@ jobs:
             secret_value=$(jq -r --arg key "$secret_name" '.[$key]' <<< "$SECRETS")
             
             if [ -z "$secret_value" ] || [ "$secret_value" = "null" ]; then
-              echo "Secret '$secret_name' not found in source repository - creating it"
-              # Create in source repository first
-              echo "$NEW_SECRET_VALUE" | gh secret set "$secret_name" --body-file -
-              secret_value="$NEW_SECRET_VALUE"
+              echo "Warning: Secret '$secret_name' not found in repository secrets"
+              continue
             fi
             
             # Get target repositories for this secret
