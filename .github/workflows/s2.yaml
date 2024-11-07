@@ -12,11 +12,12 @@ jobs:
 
       - name: Setup GitHub CLI
         run: |
-          gh auth login --with-token <<< "${{ secrets.SECRETS_TOKEN }}"
+          gh auth login --with-token <<< "${{ secrets.GH_PAT }}"
 
       - name: Process Secrets
         env:
           SECRETS: '${{ toJson(secrets) }}'
+          GITHUB_OWNER: ${{ github.repository_owner }}
         run: |
           # Read all secret names from mapping.json
           SECRET_NAMES=$(jq -r 'keys[]' mapping.json)
@@ -25,11 +26,10 @@ jobs:
           echo "$SECRET_NAMES" | while read -r secret_name; do
             echo "Processing secret: $secret_name"
             
-            # Get the secret value
             secret_value=$(jq -r --arg key "$secret_name" '.[$key]' <<< "$SECRETS")
             
             if [ -z "$secret_value" ] || [ "$secret_value" = "null" ]; then
-              echo "Warning: Secret '$secret_name' not found in repository secrets"
+              echo "Error: Secret '$secret_name' not found in source repository"
               continue
             fi
             
@@ -39,8 +39,8 @@ jobs:
             # Sync to each target repository
             echo "$target_repos" | while read -r repo; do
               if [ ! -z "$repo" ]; then
-                echo "Syncing secret '$secret_name' to repository '$repo'"
-                echo "$secret_value" | gh secret set "$secret_name" --body-file - --repo "$repo"
+                echo "Creating/updating secret '$secret_name' in repository '$GITHUB_OWNER/$repo'"
+                gh secret set "$secret_name" -R "$GITHUB_OWNER/$repo" --body "$secret_value"
               fi
             done
           done
