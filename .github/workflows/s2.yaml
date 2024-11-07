@@ -31,13 +31,34 @@ jobs:
             const repos = ${{ toJson(matrix.repos) }}
             
             for (const repo of repos) {
-              console.log(`Setting ${secret} for repository ${repo}`)
-              await github.rest.actions.createOrUpdateRepoSecret({
-                owner: context.repo.owner,
-                repo: repo,
-                secret_name: secret,
-                secret_value: secretValue
-              })
+              try {
+                console.log(`Checking repository ${context.repo.owner}/${repo}`)
+                
+                // First verify the repository exists and we have access
+                try {
+                  await github.rest.repos.get({
+                    owner: context.repo.owner,
+                    repo: repo
+                  });
+                } catch (e) {
+                  console.error(`Repository ${context.repo.owner}/${repo} not found or no access`);
+                  continue;
+                }
+                
+                console.log(`Setting ${secret} for repository ${repo}`)
+                await github.rest.actions.createOrUpdateRepoSecret({
+                  owner: context.repo.owner,
+                  repo: repo,
+                  secret_name: secret,
+                  secret_value: secretValue
+                })
+                console.log(`Successfully set secret for ${repo}`)
+              } catch (error) {
+                console.error(`Error setting secret for ${repo}:`, error.message)
+                if (error.status === 404) {
+                  console.error('Repository not found or no access')
+                }
+              }
             }
         env:
           ${{ matrix.secret }}: ${{ secrets[matrix.secret] }}
