@@ -1,7 +1,7 @@
 name: Sync Repository Secrets
 
 on:
-  workflow_dispatch: {}  # No inputs needed, will sync all secrets from mapping
+  workflow_dispatch: {}
 
 jobs:
   sync-secrets:
@@ -16,17 +16,19 @@ jobs:
 
       - name: Process Secrets
         env:
-          GITHUB_TOKEN: ${{ secrets.GH_PAT }}
+          SECRETS: '${{ toJson(secrets) }}'
         run: |
           # Read all secret names from mapping.json
           SECRET_NAMES=$(jq -r 'keys[]' mapping.json)
           
           # Process each secret
           echo "$SECRET_NAMES" | while read -r secret_name; do
-            # Get the secret value using indirect reference
-            secret_value="${{ secrets[format('{0}', secret_name)] }}"
+            echo "Processing secret: $secret_name"
             
-            if [ -z "$secret_value" ]; then
+            # Get the secret value
+            secret_value=$(jq -r --arg key "$secret_name" '.[$key]' <<< "$SECRETS")
+            
+            if [ -z "$secret_value" ] || [ "$secret_value" = "null" ]; then
               echo "Warning: Secret '$secret_name' not found in repository secrets"
               continue
             fi
