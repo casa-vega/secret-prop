@@ -1,9 +1,9 @@
 {
-  "secret_a": [
+  "SECRET_A": [
     "repo-secret-a",
     "repo-secret-b"
   ],
-  "secret_b": [
+  "SECRET_B": [
     "repo-secret-b",
     "repo-secret-c"
   ]
