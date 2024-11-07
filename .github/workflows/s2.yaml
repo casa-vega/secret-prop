@@ -1,12 +1,7 @@
 name: Sync Repository Secrets
 
 on:
-  workflow_dispatch:
-    inputs:
-      secret_name:
-        description: 'Name of the secret to sync'
-        required: true
-        type: string
+  workflow_dispatch: {}  # No inputs needed, will sync all secrets from mapping
 
 jobs:
   sync-secrets:
@@ -19,32 +14,31 @@ jobs:
         run: |
           gh auth login --with-token <<< "${{ secrets.GH_PAT }}"
 
-      - name: Read mapping file
-        id: read-mapping
-        run: |
-          MAPPING=$(cat mapping.json)
-          echo "mapping=$MAPPING" >> $GITHUB_OUTPUT
-
-      - name: Get target repositories
-        id: get-repos
-        run: |
-          SECRET_NAME="${{ github.event.inputs.secret_name }}"
-          REPOS=$(echo '${{ steps.read-mapping.outputs.mapping }}' | jq -r --arg secret "$SECRET_NAME" '.[$secret][]')
-          echo "repos=$REPOS" >> $GITHUB_OUTPUT
-
-      - name: Sync secret to repositories
+      - name: Process Secrets
         env:
-          SECRET_VALUE: ${{ secrets[github.event.inputs.secret_name] }}
           GITHUB_TOKEN: ${{ secrets.GH_PAT }}
         run: |
-          if [ -z "$SECRET_VALUE" ]; then
-            echo "Error: Secret value not found"
-            exit 1
-          fi
-
-          echo '${{ steps.get-repos.outputs.repos }}' | while read -r repo; do
-            if [ ! -z "$repo" ]; then
-              echo "Syncing secret to $repo"
-              echo "$SECRET_VALUE" | gh secret set "${{ github.event.inputs.secret_name }}" --body-file - --repo "$repo"
+          # Read all secret names from mapping.json
+          SECRET_NAMES=$(jq -r 'keys[]' mapping.json)
+          
+          # Process each secret
+          echo "$SECRET_NAMES" | while read -r secret_name; do
+            # Get the secret value using indirect reference
+            secret_value="${{ secrets[format('{0}', secret_name)] }}"
+            
+            if [ -z "$secret_value" ]; then
+              echo "Warning: Secret '$secret_name' not found in repository secrets"
+              continue
             fi
+            
+            # Get target repositories for this secret
+            target_repos=$(jq -r --arg secret "$secret_name" '.[$secret][]' mapping.json)
+            
+            # Sync to each target repository
+            echo "$target_repos" | while read -r repo; do
+              if [ ! -z "$repo" ]; then
+                echo "Syncing secret '$secret_name' to repository '$repo'"
+                echo "$secret_value" | gh secret set "$secret_name" --body-file - --repo "$repo"
+              fi
+            done
           done
